@@ -164,8 +164,7 @@ async function run() {
 
     return {
       name: `${p.port}-${p.pid}`,
-      message: `${p.port.padEnd(5)} 🎯 ${nameColored}`,
-      hint: hintStr,
+      message: `${p.port.padEnd(5)} 🎯 ${nameColored}  ${hintStr}`,
       value: p
     };
   });
@@ -175,6 +174,7 @@ async function run() {
     name: 'selected',
     message: 'Select targets to headshot (Space to select, Enter to execute):',
     choices: choices,
+    limit: 10,
     result(names) {
       return this.map(names);
     }
