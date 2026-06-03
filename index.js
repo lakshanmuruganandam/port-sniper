@@ -143,8 +143,7 @@ async function run() {
     
     const cpuStr = pc.magenta(`${stat.cpu.toFixed(1)}% CPU`);
     const memStr = pc.blue(`${formatBytes(stat.memory)} RAM`);
-    let desc = `PID: ${p.pid.padEnd(6)} | ${cpuStr} | ${memStr}`;
-
+    
     let displayName = p.name;
     if (isSystem) displayName += ' [SYSTEM]';
     
@@ -152,9 +151,11 @@ async function run() {
     displayName = displayName.padEnd(25);
     
     let nameColored;
+    let hintStr = pc.gray(`PID: ${p.pid.padEnd(6)} | `) + cpuStr + pc.gray(` | `) + memStr;
+
     if (isSystem) {
       nameColored = pc.red(displayName);
-      desc += pc.red(' (CRITICAL)');
+      hintStr += pc.red(' (CRITICAL)');
     } else if (p.name.includes('node') || p.name.includes('python') || p.name.includes('go')) {
       nameColored = pc.cyan(displayName);
     } else {
@@ -164,7 +165,7 @@ async function run() {
     return {
       name: `${p.port}-${p.pid}`,
       message: `Port ${p.port.padEnd(5)} 🎯 ${nameColored}`,
-      hint: pc.gray(desc),
+      hint: hintStr,
       value: p
     };
   });
