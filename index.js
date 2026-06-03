@@ -174,7 +174,8 @@ async function run() {
     name: 'selected',
     message: 'Select targets to headshot:',
     choices: choices,
-    pageSize: 10
+    pageSize: 10,
+    loop: false
   }]);
 
   const targets = Object.values(selected);
