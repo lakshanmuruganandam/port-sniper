@@ -141,30 +141,30 @@ async function run() {
     const isSystem = SYSTEM_PROCESSES.includes(p.name);
     const stat = stats[p.pid] || { cpu: 0, memory: 0 };
     
-    const cpuStr = pc.magenta(`${stat.cpu.toFixed(1)}% CPU`);
-    const memStr = pc.blue(`${formatBytes(stat.memory)} RAM`);
+    const cpuRaw = `${stat.cpu.toFixed(1)}%`;
+    const memRaw = formatBytes(stat.memory);
+    
+    const cpuStr = pc.magenta(cpuRaw.padEnd(5));
+    const memStr = pc.blue(memRaw.padEnd(8));
     
     let displayName = p.name;
-    if (isSystem) displayName += ' [SYSTEM]';
+    if (isSystem) displayName += '*';
     
-    displayName = displayName.length > 25 ? displayName.substring(0, 22) + '...' : displayName;
-    displayName = displayName.padEnd(25);
+    displayName = displayName.length > 15 ? displayName.substring(0, 13) + '..' : displayName;
+    displayName = displayName.padEnd(15);
     
     let nameColored;
-    let hintStr = pc.gray(`PID: ${p.pid.padEnd(6)} | `) + cpuStr + pc.gray(` | `) + memStr;
+    if (isSystem) nameColored = pc.red(displayName);
+    else if (p.name.includes('node') || p.name.includes('python') || p.name.includes('go')) nameColored = pc.cyan(displayName);
+    else nameColored = pc.white(displayName);
 
-    if (isSystem) {
-      nameColored = pc.red(displayName);
-      hintStr += pc.red(' (CRITICAL)');
-    } else if (p.name.includes('node') || p.name.includes('python') || p.name.includes('go')) {
-      nameColored = pc.cyan(displayName);
-    } else {
-      nameColored = pc.white(displayName);
-    }
+    let pidStr = String(p.pid).padEnd(5);
+    let hintStr = pc.gray(`PID:${pidStr} | `) + cpuStr + pc.gray(` | `) + memStr;
+    if (isSystem) hintStr += pc.red(' ⚠️');
 
     return {
       name: `${p.port}-${p.pid}`,
-      message: `Port ${p.port.padEnd(5)} 🎯 ${nameColored}`,
+      message: `${p.port.padEnd(5)} 🎯 ${nameColored}`,
       hint: hintStr,
       value: p
     };
