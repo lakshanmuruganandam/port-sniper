@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { execSync } from 'child_process';
-import enquirer from 'enquirer';
+import inquirer from 'inquirer';
 import pc from 'picocolors';
 import { Command } from 'commander';
 import kill from 'tree-kill';
@@ -163,22 +163,19 @@ async function run() {
     if (isSystem) hintStr += pc.red(' ⚠️');
 
     return {
-      name: `${p.port}-${p.pid}`,
-      message: `${p.port.padEnd(5)} 🎯 ${nameColored}  ${hintStr}`,
-      value: p
+      name: `${p.port.padEnd(5)} 🎯 ${nameColored}  ${hintStr}`,
+      value: p,
+      short: `${p.port}`
     };
   });
 
-  const { selected } = await enquirer.prompt({
-    type: 'multiselect',
+  const { selected } = await inquirer.prompt([{
+    type: 'checkbox',
     name: 'selected',
-    message: 'Select targets to headshot (Space to select, Enter to execute):',
+    message: 'Select targets to headshot:',
     choices: choices,
-    limit: 10,
-    result(names) {
-      return this.map(names);
-    }
-  });
+    pageSize: 10
+  }]);
 
   const targets = Object.values(selected);
 
@@ -191,12 +188,12 @@ async function run() {
   let killed = 0;
   for (const target of targets) {
     if (SYSTEM_PROCESSES.includes(target.name) && !options.dryRun) {
-      const { confirm } = await enquirer.prompt({
+      const { confirm } = await inquirer.prompt([{
         type: 'confirm',
         name: 'confirm',
         message: pc.bgRed(pc.white(` WARNING: ${target.name} is a SYSTEM process. Killing it may crash your OS. Proceed? `)),
-        initial: false
-      });
+        default: false
+      }]);
       if (!confirm) {
         console.log(pc.gray(`Skipped ${target.name}`));
         continue;
