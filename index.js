@@ -139,25 +139,31 @@ async function run() {
 
   const choices = targetProcesses.map(p => {
     const isSystem = SYSTEM_PROCESSES.includes(p.name);
-    let nameColored = p.name;
     const stat = stats[p.pid] || { cpu: 0, memory: 0 };
     
     const cpuStr = pc.magenta(`${stat.cpu.toFixed(1)}% CPU`);
     const memStr = pc.blue(`${formatBytes(stat.memory)} RAM`);
     let desc = `PID: ${p.pid.padEnd(6)} | ${cpuStr} | ${memStr}`;
+
+    let displayName = p.name;
+    if (isSystem) displayName += ' [SYSTEM]';
     
+    displayName = displayName.length > 25 ? displayName.substring(0, 22) + '...' : displayName;
+    displayName = displayName.padEnd(25);
+    
+    let nameColored;
     if (isSystem) {
-      nameColored = pc.red(p.name + ' [SYSTEM]');
-      desc += pc.red(' (CRITICAL SYSTEM PROCESS)');
+      nameColored = pc.red(displayName);
+      desc += pc.red(' (CRITICAL)');
     } else if (p.name.includes('node') || p.name.includes('python') || p.name.includes('go')) {
-      nameColored = pc.cyan(p.name);
+      nameColored = pc.cyan(displayName);
     } else {
-      nameColored = pc.white(p.name);
+      nameColored = pc.white(displayName);
     }
 
     return {
       name: `${p.port}-${p.pid}`,
-      message: `Port ${p.port.padEnd(5)} 🎯 ${nameColored.padEnd(30)}`,
+      message: `Port ${p.port.padEnd(5)} 🎯 ${nameColored}`,
       hint: pc.gray(desc),
       value: p
     };
