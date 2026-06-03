@@ -6,6 +6,9 @@ import pc from 'picocolors';
 import { Command } from 'commander';
 import kill from 'tree-kill';
 import boxen from 'boxen';
+import pidusage from 'pidusage';
+import cliSpinners from 'cli-spinners';
+import logUpdate from 'log-update';
 
 const program = new Command();
 
@@ -28,18 +31,15 @@ const BANNER = pc.red(`
     ╚═╝      ╚═════╝ ╚═╝  ╚═╝   ╚═╝       ╚══════╝╚═╝  ╚═══╝╚═╝╚═╝     ╚══════╝╚═╝  ╚═╝
 `);
 
-// Critical system processes that shouldn't be killed
 const SYSTEM_PROCESSES = ['launchd', 'syslogd', 'kextd', 'fseventsd', 'distnoted', 'mds', 'systemstats', 'sshd', 'rapportd', 'ControlCe'];
 
 function getListeningPorts() {
   try {
-    // macOS/Linux
     const output = execSync('lsof -iTCP -sTCP:LISTEN -P -n', { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] });
-    const lines = output.trim().split('\n').slice(1); // skip header
+    const lines = output.trim().split('\n').slice(1);
     const processes = [];
 
     lines.forEach(line => {
-      // Example line: node 12345 user 22u IPv4 0x1234 0t0 TCP *:3000 (LISTEN)
       const parts = line.split(/\s+/);
       if (parts.length >= 9) {
         const name = parts[0];
@@ -55,7 +55,6 @@ function getListeningPorts() {
       }
     });
     
-    // Deduplicate by port + pid
     const unique = [];
     const seen = new Set();
     processes.forEach(p => {
@@ -68,8 +67,6 @@ function getListeningPorts() {
     
     return unique.sort((a, b) => parseInt(a.port) - parseInt(b.port));
   } catch (err) {
-    // If lsof fails (e.g. no ports or Windows), return empty
-    // To make it perfect, we could add netstat for Windows, but lsof is great for Mac/Linux
     return [];
   }
 }
@@ -77,19 +74,22 @@ function getListeningPorts() {
 function killProcess(pid, name, dryRun) {
   return new Promise((resolve) => {
     if (dryRun) {
-      console.log(pc.yellow(`[DRY RUN] Would kill PID ${pid} (${name})`));
-      resolve(true);
+      setTimeout(() => resolve(true), 300); // simulate delay
       return;
     }
     kill(pid, 'SIGKILL', (err) => {
-      if (err) {
-        console.log(pc.red(`Failed to kill PID ${pid} (${name}): ${err.message}`));
-        resolve(false);
-      } else {
-        resolve(true);
-      }
+      if (err) resolve(false);
+      else resolve(true);
     });
   });
+}
+
+function formatBytes(bytes) {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 
 async function run() {
@@ -97,18 +97,37 @@ async function run() {
   console.log(pc.gray(' Architected by @lakshanmuruganandam \n'));
 
   if (options.dryRun) {
-    console.log(pc.yellow('⚠️  DRY RUN MODE ENABLED - No processes will be actually killed\n'));
+    console.log(boxen(pc.yellow('⚠️ DRY RUN MODE ENABLED - No processes will be harmed'), { padding: 0, margin: { bottom: 1 }, borderStyle: 'round', borderColor: 'yellow' }));
   }
 
-  console.log(pc.cyan('📡 Scanning for open ports...'));
+  // Animated scanner
+  const spinner = cliSpinners.dots;
+  let i = 0;
+  const timer = setInterval(() => {
+    logUpdate(pc.cyan(`${spinner.frames[i = ++i % spinner.frames.length]} Scanning network interfaces & gathering telemetry...`));
+  }, spinner.interval);
+
   const processes = getListeningPorts();
+  
+  // Gather memory and CPU stats
+  const pids = processes.map(p => p.pid);
+  let stats = {};
+  if (pids.length > 0) {
+    try {
+      stats = await pidusage(pids);
+    } catch (e) {
+      // Ignore if some processes died in the meantime
+    }
+  }
+
+  clearInterval(timer);
+  logUpdate.clear();
 
   if (processes.length === 0) {
-    console.log(pc.green('\n✨ Your ports are clean! No listening processes found.'));
+    console.log(pc.green('\n✨ Sector clear. No zombie processes detected.'));
     process.exit(0);
   }
 
-  // Filter if specific port is requested
   const targetProcesses = options.port 
     ? processes.filter(p => p.port === options.port)
     : processes;
@@ -118,15 +137,18 @@ async function run() {
     process.exit(0);
   }
 
-  // Build choices for TUI
   const choices = targetProcesses.map(p => {
     const isSystem = SYSTEM_PROCESSES.includes(p.name);
     let nameColored = p.name;
-    let desc = `PID: ${p.pid.padEnd(6)} | User: ${p.user}`;
+    const stat = stats[p.pid] || { cpu: 0, memory: 0 };
+    
+    const cpuStr = pc.magenta(`${stat.cpu.toFixed(1)}% CPU`);
+    const memStr = pc.blue(`${formatBytes(stat.memory)} RAM`);
+    let desc = `PID: ${p.pid.padEnd(6)} | ${cpuStr} | ${memStr}`;
     
     if (isSystem) {
       nameColored = pc.red(p.name + ' [SYSTEM]');
-      desc += pc.red(' (WARNING: System process)');
+      desc += pc.red(' (CRITICAL SYSTEM PROCESS)');
     } else if (p.name.includes('node') || p.name.includes('python') || p.name.includes('go')) {
       nameColored = pc.cyan(p.name);
     } else {
@@ -162,11 +184,10 @@ async function run() {
   let killed = 0;
   for (const target of targets) {
     if (SYSTEM_PROCESSES.includes(target.name) && !options.dryRun) {
-      // Extra confirmation for system processes
       const { confirm } = await enquirer.prompt({
         type: 'confirm',
         name: 'confirm',
-        message: pc.red(`WARNING: ${target.name} is a system process. Killing it may cause system instability. Are you absolutely sure?`),
+        message: pc.bgRed(pc.white(` WARNING: ${target.name} is a SYSTEM process. Killing it may crash your OS. Proceed? `)),
         initial: false
       });
       if (!confirm) {
@@ -175,11 +196,22 @@ async function run() {
       }
     }
 
-    process.stdout.write(pc.red(`💥 HEADSHOT `) + pc.white(`Port ${target.port} `) + pc.gray(`(PID ${target.pid} - ${target.name})... `));
+    const killSpinner = cliSpinners.sniper || cliSpinners.dots;
+    let k = 0;
+    const kTimer = setInterval(() => {
+      logUpdate(pc.red(`${killSpinner.frames[k = ++k % killSpinner.frames.length]} Engaging PID ${target.pid} on Port ${target.port}...`));
+    }, killSpinner.interval);
+
     const success = await killProcess(target.pid, target.name, options.dryRun);
+    
+    clearInterval(kTimer);
     if (success) {
-      console.log(pc.green('OBLITERATED'));
+      logUpdate(pc.red(`💥 HEADSHOT `) + pc.white(`Port ${target.port} `) + pc.gray(`(PID ${target.pid}) `) + pc.green('OBLITERATED'));
+      logUpdate.done();
       killed++;
+    } else {
+      logUpdate(pc.red(`❌ MISS `) + pc.white(`Port ${target.port} `) + pc.gray(`(PID ${target.pid}) survived.`));
+      logUpdate.done();
     }
   }
 
