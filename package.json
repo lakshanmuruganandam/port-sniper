@@ -1,14 +1,23 @@
 {
   "name": "port-sniper-cli",
   "version": "1.0.1",
-  "description": "",
+  "description": "Find out exactly what process is hogging your port and kill it instantly.",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "keywords": [
+    "port",
+    "kill",
+    "process",
+    "lsof",
+    "cli",
+    "developer-tools",
+    "productivity",
+    "sniper"
+  ],
+  "author": "Lakshan Muruganandam <lakshan@example.com>",
+  "license": "MIT",
   "dependencies": {
     "boxen": "^8.0.1",
     "cli-spinners": "^3.4.0",
